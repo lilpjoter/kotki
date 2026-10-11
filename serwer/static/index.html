@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kotki – playlista matrycy</title>
+<style>
+  :root { --bg:#14110f; --panel:#1f1a17; --line:#352c27; --text:#f1e9e2; --muted:#a3958a; --led:#ff3b2f; --ledoff:#2a1512; --ok:#6fcf7a; --warn:#f0b24a; }
+  * { box-sizing:border-box; }
+  [hidden] { display:none !important; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width:760px; margin:0 auto; padding:20px 16px 60px; }
+  header { display:flex; flex-wrap:wrap; gap:8px 16px; align-items:baseline; justify-content:space-between; margin-bottom:16px; }
+  h1 { font-size:22px; margin:0; letter-spacing:.2px; }
+  h2 { font-size:14px; text-transform:uppercase; letter-spacing:1px; color:var(--muted); margin:28px 0 10px; font-weight:600; }
+  .status { color:var(--muted); font-size:13px; }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--muted); margin-right:6px; }
+  .dot.on { background:var(--ok); } .dot.late { background:var(--warn); }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; }
+  .banner { border-color:var(--warn); margin-bottom:14px; display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between; }
+  canvas.led { display:block; width:100%; max-width:360px; aspect-ratio:3/1; background:#0b0605; border-radius:6px; image-rendering:auto; }
+  .card { display:grid; grid-template-columns:minmax(0,360px) 1fr; gap:12px 16px; align-items:center; margin-bottom:10px; }
+  @media (max-width:620px) { .card { grid-template-columns:1fr; } }
+  .fields { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .fields .wide { grid-column:1 / -1; }
+  label { display:block; font-size:12px; color:var(--muted); }
+  input[type=text], input[type=number], input[type=password], select {
+    width:100%; margin-top:3px; padding:7px 9px; border-radius:6px; border:1px solid var(--line);
+    background:#120f0d; color:var(--text); font:inherit; }
+  input[type=range] { width:100%; }
+  input:focus, select:focus, button:focus-visible { outline:2px solid var(--led); outline-offset:1px; }
+  button { font:inherit; padding:7px 12px; border-radius:6px; border:1px solid var(--line); background:#2b2420; color:var(--text); cursor:pointer; }
+  button:hover { background:#372e29; }
+  button.primary { background:var(--led); border-color:var(--led); color:#1a0503; font-weight:600; }
+  button.primary:disabled { opacity:.4; cursor:not-allowed; }
+  button.icon { padding:7px 10px; min-width:38px; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .meta { font-size:12px; color:var(--muted); }
+  .check { display:flex; gap:6px; align-items:center; color:var(--text); font-size:14px; margin-top:18px; }
+  #toast { position:fixed; left:50%; bottom:20px; transform:translateX(-50%); background:#2b2420; border:1px solid var(--line);
+           padding:10px 16px; border-radius:8px; max-width:90vw; display:none; }
+  #toast.err { border-color:var(--led); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Kotki 24×8</h1>
+    <div class="status"><span class="dot" id="espDot"></span><span id="espText">sprawdzam…</span> · wersja <span id="ver">–</span></div>
+  </header>
+
+  <div class="panel banner" id="restore" hidden>
+    <span>Serwer został zrestartowany i wrócił do domyślnych kotków. ESP nadal gra to, co miał zapisane.</span>
+    <button class="primary" id="restoreBtn">Przywróć ostatnią playlistę</button>
+  </div>
+
+  <div class="panel" id="pwPanel" hidden>
+    <label>Hasło (potrzebne do zmian, zapamiętywane w tej przeglądarce)
+      <input type="password" id="pw" autocomplete="current-password">
+    </label>
+  </div>
+
+  <h2>Playlista <span class="meta" id="count"></span></h2>
+  <div id="list"></div>
+  <div class="row">
+    <button id="exportBtn">Pobierz kopię (JSON)</button>
+    <button id="importBtn">Wczytaj kopię</button>
+    <input type="file" id="importFile" accept="application/json,.json" hidden>
+  </div>
+
+  <h2>Dodaj animację</h2>
+  <div class="panel">
+    <div class="card" style="margin-bottom:0">
+      <div>
+        <canvas class="led" id="preview" width="480" height="160"></canvas>
+        <div class="meta" id="previewMeta" style="margin-top:6px">Wybierz GIF albo obrazek. Najlepiej wychodzi prosty pixel-art 24×8.</div>
+      </div>
+      <div class="fields">
+        <label class="wide">Plik (GIF, PNG, JPG, WebP)
+          <input type="file" id="file" accept="image/*" style="margin-top:3px; width:100%">
+        </label>
+        <label class="wide">Próg jasności: <span id="thrVal">128</span>
+          <input type="range" id="thr" min="1" max="255" value="128">
+        </label>
+        <label>Dopasowanie
+          <select id="fit">
+            <option value="contain">Zmieść całość</option>
+            <option value="cover">Wypełnij i przytnij</option>
+            <option value="stretch">Rozciągnij</option>
+          </select>
+        </label>
+        <label class="check"><input type="checkbox" id="inv"> Negatyw</label>
+        <label class="wide">Nazwa <input type="text" id="name" maxlength="40"></label>
+        <label>Czas klatki (ms) <input type="number" id="ms" min="20" max="5000" value="150"></label>
+        <label>Powtórzenia <input type="number" id="rep" min="1" max="50" value="1"></label>
+        <div class="wide"><button class="primary" id="addBtn" disabled>Dodaj do playlisty</button></div>
+      </div>
+    </div>
+  </div>
+</main>
+<div id="toast"></div>
+
+<script>
+const W = 24, H = 8;
+const $ = id => document.getElementById(id);
+let playlist = null;          // ostatnia odpowiedź serwera
+let pending = null;           // klatki czekające na dodanie
+const players = [];           // {canvas, frames, ms, t, i}
+
+function store(key, val) {
+  try { if (val === undefined) return localStorage.getItem(key); localStorage.setItem(key, val); } catch (e) { return null; }
+}
+
+function toast(msg, err) {
+  const t = $('toast'); t.textContent = msg; t.className = err ? 'err' : ''; t.style.display = 'block';
+  clearTimeout(toast.h); toast.h = setTimeout(() => t.style.display = 'none', err ? 5000 : 2200);
+}
+
+async function api(method, url, body) {
+  const opt = { method, headers: { 'X-Password': $('pw').value } };
+  if (body instanceof FormData) opt.body = body;
+  else if (body !== undefined) { opt.headers['Content-Type'] = 'application/json'; opt.body = JSON.stringify(body); }
+  let res;
+  try { res = await fetch(url, opt); } catch (e) { toast('Brak połączenia z serwerem.', true); throw e; }
+  let data = null;
+  try { data = await res.json(); } catch (e) {}
+  if (!res.ok) {
+    const msg = (data && data.error) || ('Błąd serwera (' + res.status + ').');
+    toast(msg, true);
+    if (res.status === 401) { $('pwPanel').hidden = false; $('pw').focus(); }
+    throw new Error(msg);
+  }
+  return data;
+}
+
+// ---------- rysowanie ----------
+function draw(canvas, hex) {
+  const c = canvas.getContext('2d'), s = canvas.width / W, r = s * 0.38;
+  const css = getComputedStyle(document.documentElement);
+  const on = css.getPropertyValue('--led').trim(), off = css.getPropertyValue('--ledoff').trim();
+  c.clearRect(0, 0, canvas.width, canvas.height);
+  for (let x = 0; x < W; x++) {
+    const b = hex ? parseInt(hex.substr(x * 2, 2), 16) : 0;
+    for (let y = 0; y < H; y++) {
+      c.fillStyle = (b >> y) & 1 ? on : off;
+      c.beginPath(); c.arc((x + .5) * s, (y + .5) * s, r, 0, 6.2832); c.fill();
+    }
+  }
+}
+
+function tick(now) {
+  for (const p of players) {
+    if (!p.frames.length) continue;
+    if (now - p.t >= p.ms) { p.t = now; p.i = (p.i + 1) % p.frames.length; draw(p.canvas, p.frames[p.i]); }
+  }
+  requestAnimationFrame(tick);
+}
+
+const previewPlayer = { canvas: $('preview'), frames: [], ms: 150, t: 0, i: 0 };
+players.push(previewPlayer);
+draw($('preview'), null);
+
+// ---------- playlista ----------
+function setStatus(d) {
+  $('ver').textContent = d.pristine ? 'domyślna' : d.version;
+  const s = d.esp_seconds_ago, dot = $('espDot');
+  if (s === null) { dot.className = 'dot'; $('espText').textContent = 'ESP jeszcze się nie zgłosił'; }
+  else if (s < 180) { dot.className = 'dot on'; $('espText').textContent = 'ESP online (' + s + ' s temu)'; }
+  else { dot.className = 'dot late'; $('espText').textContent = 'ESP ostatnio ' + Math.round(s / 60) + ' min temu'; }
+}
+
+function apply(d) {
+  playlist = d;
+  setStatus(d);
+  if (d.password_required) $('pwPanel').hidden = false;
+  if (!d.pristine) store('kotki_backup', JSON.stringify(d.animations));
+  $('restore').hidden = !(d.pristine && store('kotki_backup'));
+  const total = d.animations.reduce((n, a) => n + a.frames.length, 0);
+  $('count').textContent = '· ' + d.animations.length + '/' + d.limits.anims + ' animacji, ' + total + '/' + d.limits.total + ' klatek';
+
+  players.length = 1;   // zostaje tylko podgląd
+  const list = $('list'); list.textContent = '';
+  d.animations.forEach((a, idx) => {
+    const card = document.createElement('div'); card.className = 'panel card';
+    const left = document.createElement('div');
+    const cv = document.createElement('canvas'); cv.className = 'led'; cv.width = 480; cv.height = 160;
+    const meta = document.createElement('div'); meta.className = 'meta'; meta.style.marginTop = '6px';
+    meta.textContent = a.frames.length + ' kl. · jedno przejście ' + (a.frames.length * a.ms / 1000).toFixed(1) + ' s';
+    left.append(cv, meta);
+
+    const f = document.createElement('div'); f.className = 'fields';
+    const mk = (label, type, val, cls, attrs) => {
+      const l = document.createElement('label'); if (cls) l.className = cls; l.textContent = label;
+      const i = document.createElement('input'); i.type = type; i.value = val; Object.assign(i, attrs || {}); l.append(i); f.append(l); return i;
+    };
+    const nm = mk('Nazwa', 'text', a.name, 'wide', { maxLength: 40 });
+    const ms = mk('Czas klatki (ms)', 'number', a.ms, '', { min: 20, max: 5000 });
+    const rp = mk('Powtórzenia', 'number', a.repeat, '', { min: 1, max: 50 });
+    const edit = (key, el, num) => el.addEventListener('change', async () => {
+      try { apply(await api('PATCH', '/api/animations/' + a.id, { [key]: num ? Number(el.value) : el.value })); toast('Zapisano.'); }
+      catch (e) { el.value = a[key]; }
+    });
+    edit('name', nm); edit('ms', ms, true); edit('repeat', rp, true);
+
+    const row = document.createElement('div'); row.className = 'row wide';
+    const btn = (txt, title, fn, dis) => { const b = document.createElement('button'); b.className = 'icon'; b.textContent = txt; b.title = title; b.setAttribute('aria-label', title); b.disabled = !!dis; b.onclick = fn; row.append(b); };
+    const move = dir => async () => {
+      const ids = d.animations.map(x => x.id); const j = idx + dir;
+      [ids[idx], ids[j]] = [ids[j], ids[idx]];
+      try { apply(await api('POST', '/api/order', { ids })); } catch (e) {}
+    };
+    btn('↑', 'Przesuń wyżej', move(-1), idx === 0);
+    btn('↓', 'Przesuń niżej', move(1), idx === d.animations.length - 1);
+    btn('Usuń', 'Usuń animację', async () => {
+      if (!confirm('Usunąć „' + a.name + '”?')) return;
+      try { apply(await api('DELETE', '/api/animations/' + a.id)); toast('Usunięto.'); } catch (e) {}
+    });
+    f.append(row);
+    card.append(left, f); list.append(card);
+    draw(cv, a.frames[0]);
+    players.push({ canvas: cv, frames: a.frames, ms: a.ms, t: 0, i: 0 });
+  });
+}
+
+async function refresh(statusOnly) {
+  try {
+    const d = await api('GET', '/api/playlist');
+    if (statusOnly && playlist && d.version === playlist.version && d.pristine === playlist.pristine) setStatus(d);
+    else apply(d);
+  } catch (e) {}
+}
+
+// ---------- dodawanie ----------
+let convTimer = null;
+function scheduleConvert() { clearTimeout(convTimer); convTimer = setTimeout(convert, 200); }
+
+async function convert() {
+  const file = $('file').files[0];
+  if (!file) return;
+  const fd = new FormData();
+  fd.append('file', file); fd.append('threshold', $('thr').value);
+  fd.append('invert', $('inv').checked ? '1' : '0'); fd.append('fit', $('fit').value);
+  try {
+    const d = await api('POST', '/api/convert', fd);
+    const firstTime = !pending || pending.file !== file;
+    pending = { file, frames: d.frames };
+    if (firstTime) { $('ms').value = d.ms; $('name').value = file.name.replace(/\.[^.]+$/, '').slice(0, 40); }
+    previewPlayer.frames = d.frames; previewPlayer.i = 0; previewPlayer.ms = Number($('ms').value) || 150;
+    draw($('preview'), d.frames[0]);
+    $('previewMeta').textContent = d.frames.length + (d.frames.length === 1 ? ' klatka' : ' klatek');
+    $('addBtn').disabled = false;
+  } catch (e) { $('addBtn').disabled = true; }
+}
+
+$('file').addEventListener('change', convert);
+$('thr').addEventListener('input', () => { $('thrVal').textContent = $('thr').value; scheduleConvert(); });
+$('inv').addEventListener('change', convert);
+$('fit').addEventListener('change', convert);
+$('ms').addEventListener('input', () => { previewPlayer.ms = Number($('ms').value) || 150; });
+
+$('addBtn').addEventListener('click', async () => {
+  if (!pending) return;
+  try {
+    apply(await api('POST', '/api/animations', {
+      name: $('name').value, ms: Number($('ms').value), repeat: Number($('rep').value), frames: pending.frames }));
+    toast('Dodano. ESP pobierze zmianę w ciągu minuty.');
+    pending = null; $('file').value = ''; $('addBtn').disabled = true;
+    previewPlayer.frames = []; draw($('preview'), null); $('previewMeta').textContent = 'Wybierz kolejny plik.';
+  } catch (e) {}
+});
+
+// ---------- kopie ----------
+async function replaceAll(anims, msg) {
+  try { apply(await api('PUT', '/api/playlist', { animations: anims })); toast(msg); } catch (e) {}
+}
+$('restoreBtn').addEventListener('click', () => {
+  try { replaceAll(JSON.parse(store('kotki_backup')), 'Przywrócono.'); } catch (e) { toast('Kopia w przeglądarce jest uszkodzona.', true); }
+});
+$('exportBtn').addEventListener('click', () => {
+  if (!playlist) return;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(playlist.animations)], { type: 'application/json' }));
+  a.download = 'kotki-playlista.json'; a.click(); URL.revokeObjectURL(a.href);
+});
+$('importBtn').addEventListener('click', () => $('importFile').click());
+$('importFile').addEventListener('change', async () => {
+  const f = $('importFile').files[0]; if (!f) return;
+  try { const anims = JSON.parse(await f.text()); if (confirm('Zastąpić całą playlistę zawartością pliku?')) replaceAll(anims, 'Wczytano.'); }
+  catch (e) { toast('To nie jest poprawny plik kopii.', true); }
+  $('importFile').value = '';
+});
+
+$('pw').value = store('kotki_pw') || '';
+$('pw').addEventListener('change', () => store('kotki_pw', $('pw').value));
+
+refresh();
+setInterval(() => refresh(true), 10000);
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>
