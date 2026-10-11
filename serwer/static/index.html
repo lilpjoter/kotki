@@ -5,21 +5,22 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Kotki – playlista matrycy</title>
 <style>
-  :root { --bg:#14110f; --panel:#1f1a17; --line:#352c27; --text:#f1e9e2; --muted:#a3958a; --led:#ff3b2f; --ledoff:#2a1512; --ok:#6fcf7a; --warn:#f0b24a; }
+  :root { --bg:#14110f; --panel:#1f1a17; --line:#352c27; --text:#f1e9e2; --muted:#a3958a; --led:#ff3b2f; --ledoff:#2a1512; --ghost:#6b2a24; --ok:#6fcf7a; --warn:#f0b24a; }
   * { box-sizing:border-box; }
   [hidden] { display:none !important; }
   body { margin:0; background:var(--bg); color:var(--text); font:15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  main { max-width:760px; margin:0 auto; padding:20px 16px 60px; }
+  main { max-width:780px; margin:0 auto; padding:20px 16px 60px; }
   header { display:flex; flex-wrap:wrap; gap:8px 16px; align-items:baseline; justify-content:space-between; margin-bottom:16px; }
   h1 { font-size:22px; margin:0; letter-spacing:.2px; }
   h2 { font-size:14px; text-transform:uppercase; letter-spacing:1px; color:var(--muted); margin:28px 0 10px; font-weight:600; }
   .status { color:var(--muted); font-size:13px; }
   .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--muted); margin-right:6px; }
   .dot.on { background:var(--ok); } .dot.late { background:var(--warn); }
-  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; }
-  .banner { border-color:var(--warn); margin-bottom:14px; display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between; }
-  canvas.led { display:block; width:100%; max-width:360px; aspect-ratio:3/1; background:#0b0605; border-radius:6px; image-rendering:auto; }
-  .card { display:grid; grid-template-columns:minmax(0,360px) 1fr; gap:12px 16px; align-items:center; margin-bottom:10px; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px; margin-bottom:10px; }
+  .banner { border-color:var(--warn); display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between; }
+  canvas.led { display:block; width:100%; max-width:360px; aspect-ratio:3/1; background:#0b0605; border-radius:6px; }
+  .card { display:grid; grid-template-columns:minmax(0,360px) 1fr; gap:12px 16px; align-items:center; }
+  .card.solo { border-color:var(--led); }
   @media (max-width:620px) { .card { grid-template-columns:1fr; } }
   .fields { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
   .fields .wide { grid-column:1 / -1; }
@@ -27,18 +28,34 @@
   input[type=text], input[type=number], input[type=password], select {
     width:100%; margin-top:3px; padding:7px 9px; border-radius:6px; border:1px solid var(--line);
     background:#120f0d; color:var(--text); font:inherit; }
-  input[type=range] { width:100%; }
-  input:focus, select:focus, button:focus-visible { outline:2px solid var(--led); outline-offset:1px; }
+  input[type=range] { width:100%; accent-color:var(--led); }
+  input:focus, select:focus, button:focus-visible, canvas:focus-visible { outline:2px solid var(--led); outline-offset:1px; }
   button { font:inherit; padding:7px 12px; border-radius:6px; border:1px solid var(--line); background:#2b2420; color:var(--text); cursor:pointer; }
-  button:hover { background:#372e29; }
+  button:hover:not(:disabled) { background:#372e29; }
+  button:disabled { opacity:.4; cursor:not-allowed; }
   button.primary { background:var(--led); border-color:var(--led); color:#1a0503; font-weight:600; }
-  button.primary:disabled { opacity:.4; cursor:not-allowed; }
+  button.primary:hover:not(:disabled) { background:#ff5a50; }
   button.icon { padding:7px 10px; min-width:38px; }
+  button.active { border-color:var(--led); color:var(--led); }
   .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
   .meta { font-size:12px; color:var(--muted); }
-  .check { display:flex; gap:6px; align-items:center; color:var(--text); font-size:14px; margin-top:18px; }
+  .badge { color:var(--led); font-weight:600; }
+  .check { display:flex; gap:6px; align-items:center; color:var(--text); font-size:14px; }
+  .display { display:grid; grid-template-columns:1fr 1fr; gap:14px 20px; align-items:center; }
+  @media (max-width:620px) { .display { grid-template-columns:1fr; } }
+  /* edytor */
+  #editor { display:block; width:100%; aspect-ratio:3/1; background:#0b0605; border-radius:8px; touch-action:none; cursor:crosshair; }
+  #strip { display:flex; gap:8px; overflow-x:auto; padding:4px 2px 8px; }
+  .thumb { flex:0 0 auto; padding:3px; border-radius:6px; border:2px solid var(--line); background:#0b0605; position:relative; cursor:pointer; }
+  .thumb.sel { border-color:var(--led); }
+  .thumb canvas { display:block; width:96px; height:32px; }
+  .thumb span { position:absolute; left:5px; top:2px; font-size:10px; color:var(--muted); }
+  .tools { margin:10px 0; }
+  .sep { width:1px; height:24px; background:var(--line); margin:0 4px; }
+  details { margin-top:12px; border-top:1px solid var(--line); padding-top:10px; }
+  summary { cursor:pointer; color:var(--muted); }
   #toast { position:fixed; left:50%; bottom:20px; transform:translateX(-50%); background:#2b2420; border:1px solid var(--line);
-           padding:10px 16px; border-radius:8px; max-width:90vw; display:none; }
+           padding:10px 16px; border-radius:8px; max-width:90vw; display:none; z-index:5; }
   #toast.err { border-color:var(--led); }
 </style>
 </head>
@@ -60,6 +77,20 @@
     </label>
   </div>
 
+  <h2>Wyświetlacz</h2>
+  <div class="panel display">
+    <label>Jasność: <span id="brightVal">2</span> / 15
+      <input type="range" id="bright" min="0" max="15" value="2">
+    </label>
+    <div>
+      <div id="modeText">Gra cała playlista.</div>
+      <div class="row" style="margin-top:6px">
+        <button id="modeBtn" hidden>Wróć do playlisty</button>
+        <span class="meta">ESP stosuje zmiany w kilkanaście sekund.</span>
+      </div>
+    </div>
+  </div>
+
   <h2>Playlista <span class="meta" id="count"></span></h2>
   <div id="list"></div>
   <div class="row">
@@ -68,14 +99,49 @@
     <input type="file" id="importFile" accept="application/json,.json" hidden>
   </div>
 
-  <h2>Dodaj animację</h2>
-  <div class="panel">
-    <div class="card" style="margin-bottom:0">
-      <div>
-        <canvas class="led" id="preview" width="480" height="160"></canvas>
-        <div class="meta" id="previewMeta" style="margin-top:6px">Wybierz GIF albo obrazek. Najlepiej wychodzi prosty pixel-art 24×8.</div>
-      </div>
-      <div class="fields">
+  <h2 id="edTitle">Edytor animacji</h2>
+  <div class="panel" id="edPanel">
+    <div class="fields" style="grid-template-columns:2fr 1fr 1fr; margin-bottom:10px">
+      <label>Nazwa <input type="text" id="name" maxlength="40" value="Nowa animacja"></label>
+      <label>Czas klatki (ms) <input type="number" id="ms" min="20" max="5000" value="150"></label>
+      <label>Powtórzenia <input type="number" id="rep" min="1" max="50" value="1"></label>
+    </div>
+
+    <canvas id="editor" width="960" height="320" tabindex="0" aria-label="Pole rysowania 24 na 8 pikseli"></canvas>
+
+    <div class="row tools">
+      <button id="playBtn">▶ Odtwórz</button>
+      <span class="sep"></span>
+      <button class="icon" data-shift="-1,0" title="Przesuń w lewo" aria-label="Przesuń w lewo">←</button>
+      <button class="icon" data-shift="1,0" title="Przesuń w prawo" aria-label="Przesuń w prawo">→</button>
+      <button class="icon" data-shift="0,-1" title="Przesuń w górę" aria-label="Przesuń w górę">↑</button>
+      <button class="icon" data-shift="0,1" title="Przesuń w dół" aria-label="Przesuń w dół">↓</button>
+      <span class="sep"></span>
+      <button id="clearBtn">Wyczyść</button>
+      <button id="invertBtn">Negatyw</button>
+      <label class="check"><input type="checkbox" id="onion" checked> Poprzednia klatka w tle</label>
+    </div>
+
+    <div class="meta" id="frameInfo">Klatka 1 z 1</div>
+    <div id="strip"></div>
+    <div class="row">
+      <button id="fNew">+ Pusta klatka</button>
+      <button id="fDup">+ Kopia klatki</button>
+      <button class="icon" id="fLeft" title="Przesuń klatkę wcześniej" aria-label="Przesuń klatkę wcześniej">◀</button>
+      <button class="icon" id="fRight" title="Przesuń klatkę później" aria-label="Przesuń klatkę później">▶</button>
+      <button id="fDel">Usuń klatkę</button>
+    </div>
+
+    <div class="row" style="margin-top:14px">
+      <button class="primary" id="saveBtn" hidden>Zapisz zmiany</button>
+      <button class="primary" id="addBtn">Dodaj do playlisty</button>
+      <button id="resetBtn">Zacznij od zera</button>
+      <span class="meta" id="edState"></span>
+    </div>
+
+    <details>
+      <summary>Zacznij od GIF-a lub obrazka</summary>
+      <div class="fields" style="margin-top:10px">
         <label class="wide">Plik (GIF, PNG, JPG, WebP)
           <input type="file" id="file" accept="image/*" style="margin-top:3px; width:100%">
         </label>
@@ -89,13 +155,10 @@
             <option value="stretch">Rozciągnij</option>
           </select>
         </label>
-        <label class="check"><input type="checkbox" id="inv"> Negatyw</label>
-        <label class="wide">Nazwa <input type="text" id="name" maxlength="40"></label>
-        <label>Czas klatki (ms) <input type="number" id="ms" min="20" max="5000" value="150"></label>
-        <label>Powtórzenia <input type="number" id="rep" min="1" max="50" value="1"></label>
-        <div class="wide"><button class="primary" id="addBtn" disabled>Dodaj do playlisty</button></div>
+        <label class="check" style="margin-top:18px"><input type="checkbox" id="inv"> Negatyw</label>
+        <div class="wide meta">Plik zastępuje klatki w edytorze. Potem możesz je poprawić ręcznie.</div>
       </div>
-    </div>
+    </details>
   </div>
 </main>
 <div id="toast"></div>
@@ -104,8 +167,7 @@
 const W = 24, H = 8;
 const $ = id => document.getElementById(id);
 let playlist = null;          // ostatnia odpowiedź serwera
-let pending = null;           // klatki czekające na dodanie
-const players = [];           // {canvas, frames, ms, t, i}
+const players = [];           // podglądy na liście: {canvas, frames, ms, t, i}
 
 function store(key, val) {
   try { if (val === undefined) return localStorage.getItem(key); localStorage.setItem(key, val); } catch (e) { return null; }
@@ -133,34 +195,31 @@ async function api(method, url, body) {
   return data;
 }
 
-// ---------- rysowanie ----------
-function draw(canvas, hex) {
+// ---------- rysowanie matrycy ----------
+const css = getComputedStyle(document.documentElement);
+const COL = { on: css.getPropertyValue('--led').trim(), off: css.getPropertyValue('--ledoff').trim(), ghost: css.getPropertyValue('--ghost').trim() };
+const hexToCols = hex => { const a = new Uint8Array(W); for (let x = 0; x < W; x++) a[x] = parseInt(hex.substr(x * 2, 2), 16); return a; };
+const colsToHex = a => Array.from(a, b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+
+function draw(canvas, cols, ghost) {
   const c = canvas.getContext('2d'), s = canvas.width / W, r = s * 0.38;
-  const css = getComputedStyle(document.documentElement);
-  const on = css.getPropertyValue('--led').trim(), off = css.getPropertyValue('--ledoff').trim();
   c.clearRect(0, 0, canvas.width, canvas.height);
-  for (let x = 0; x < W; x++) {
-    const b = hex ? parseInt(hex.substr(x * 2, 2), 16) : 0;
-    for (let y = 0; y < H; y++) {
-      c.fillStyle = (b >> y) & 1 ? on : off;
-      c.beginPath(); c.arc((x + .5) * s, (y + .5) * s, r, 0, 6.2832); c.fill();
-    }
+  for (let x = 0; x < W; x++) for (let y = 0; y < H; y++) {
+    const on = cols && (cols[x] >> y) & 1, g = ghost && (ghost[x] >> y) & 1;
+    c.fillStyle = on ? COL.on : (g ? COL.ghost : COL.off);
+    c.beginPath(); c.arc((x + .5) * s, (y + .5) * s, r, 0, 6.2832); c.fill();
   }
 }
 
 function tick(now) {
   for (const p of players) {
-    if (!p.frames.length) continue;
     if (now - p.t >= p.ms) { p.t = now; p.i = (p.i + 1) % p.frames.length; draw(p.canvas, p.frames[p.i]); }
   }
+  if (ed.playing && now - ed.t >= ed.ms()) { ed.t = now; ed.cur = (ed.cur + 1) % ed.frames.length; ed.paint(true); }
   requestAnimationFrame(tick);
 }
 
-const previewPlayer = { canvas: $('preview'), frames: [], ms: 150, t: 0, i: 0 };
-players.push(previewPlayer);
-draw($('preview'), null);
-
-// ---------- playlista ----------
+// ---------- status i ustawienia wyświetlacza ----------
 function setStatus(d) {
   $('ver').textContent = d.pristine ? 'domyślna' : d.version;
   const s = d.esp_seconds_ago, dot = $('espDot');
@@ -169,6 +228,21 @@ function setStatus(d) {
   else { dot.className = 'dot late'; $('espText').textContent = 'ESP ostatnio ' + Math.round(s / 60) + ' min temu'; }
 }
 
+let brightBusy = false;
+$('bright').addEventListener('input', () => { $('brightVal').textContent = $('bright').value; });
+$('bright').addEventListener('change', async () => {
+  brightBusy = true;
+  try { apply(await api('PUT', '/api/settings', { brightness: Number($('bright').value) })); toast('Jasność ustawiona.'); }
+  catch (e) { if (playlist) { $('bright').value = playlist.brightness; $('brightVal').textContent = playlist.brightness; } }
+  brightBusy = false;
+});
+
+async function setSolo(id) {
+  try { apply(await api('PUT', '/api/settings', { solo: id })); toast(id ? 'ESP przełączy się na tę animację.' : 'ESP wróci do playlisty.'); } catch (e) {}
+}
+$('modeBtn').addEventListener('click', () => setSolo(null));
+
+// ---------- playlista ----------
 function apply(d) {
   playlist = d;
   setStatus(d);
@@ -177,15 +251,21 @@ function apply(d) {
   $('restore').hidden = !(d.pristine && store('kotki_backup'));
   const total = d.animations.reduce((n, a) => n + a.frames.length, 0);
   $('count').textContent = '· ' + d.animations.length + '/' + d.limits.anims + ' animacji, ' + total + '/' + d.limits.total + ' klatek';
+  if (!brightBusy && document.activeElement !== $('bright')) { $('bright').value = d.brightness; $('brightVal').textContent = d.brightness; }
+  const soloAnim = d.animations.find(a => a.id === d.solo);
+  $('modeText').textContent = soloAnim ? 'W pętli gra tylko: ' + soloAnim.name : 'Gra cała playlista.';
+  $('modeBtn').hidden = !soloAnim;
 
-  players.length = 1;   // zostaje tylko podgląd
+  players.length = 0;
   const list = $('list'); list.textContent = '';
   d.animations.forEach((a, idx) => {
-    const card = document.createElement('div'); card.className = 'panel card';
+    const isSolo = a.id === d.solo;
+    const card = document.createElement('div'); card.className = 'panel card' + (isSolo ? ' solo' : '');
     const left = document.createElement('div');
     const cv = document.createElement('canvas'); cv.className = 'led'; cv.width = 480; cv.height = 160;
     const meta = document.createElement('div'); meta.className = 'meta'; meta.style.marginTop = '6px';
     meta.textContent = a.frames.length + ' kl. · jedno przejście ' + (a.frames.length * a.ms / 1000).toFixed(1) + ' s';
+    if (isSolo) { const b = document.createElement('span'); b.className = 'badge'; b.textContent = ' · gra teraz w pętli'; meta.append(b); }
     left.append(cv, meta);
 
     const f = document.createElement('div'); f.className = 'fields';
@@ -203,73 +283,207 @@ function apply(d) {
     edit('name', nm); edit('ms', ms, true); edit('repeat', rp, true);
 
     const row = document.createElement('div'); row.className = 'row wide';
-    const btn = (txt, title, fn, dis) => { const b = document.createElement('button'); b.className = 'icon'; b.textContent = txt; b.title = title; b.setAttribute('aria-label', title); b.disabled = !!dis; b.onclick = fn; row.append(b); };
+    const btn = (txt, title, fn, opt) => {
+      const b = document.createElement('button'); b.textContent = txt; b.title = title; b.setAttribute('aria-label', title);
+      if (opt && opt.icon) b.className = 'icon'; if (opt && opt.active) b.classList.add('active');
+      b.disabled = !!(opt && opt.dis); b.onclick = fn; row.append(b);
+    };
     const move = dir => async () => {
       const ids = d.animations.map(x => x.id); const j = idx + dir;
       [ids[idx], ids[j]] = [ids[j], ids[idx]];
       try { apply(await api('POST', '/api/order', { ids })); } catch (e) {}
     };
-    btn('↑', 'Przesuń wyżej', move(-1), idx === 0);
-    btn('↓', 'Przesuń niżej', move(1), idx === d.animations.length - 1);
+    btn(isSolo ? 'Wróć do playlisty' : '▶ Graj tylko to', isSolo ? 'Wróć do całej playlisty' : 'Graj na ESP tylko tę animację w pętli',
+        () => setSolo(isSolo ? null : a.id), { active: isSolo });
+    btn('Edytuj', 'Otwórz w edytorze', () => ed.load(a));
+    btn('↑', 'Przesuń wyżej', move(-1), { icon: true, dis: idx === 0 });
+    btn('↓', 'Przesuń niżej', move(1), { icon: true, dis: idx === d.animations.length - 1 });
     btn('Usuń', 'Usuń animację', async () => {
       if (!confirm('Usunąć „' + a.name + '”?')) return;
-      try { apply(await api('DELETE', '/api/animations/' + a.id)); toast('Usunięto.'); } catch (e) {}
+      try { apply(await api('DELETE', '/api/animations/' + a.id)); toast('Usunięto.'); if (ed.id === a.id) ed.setId(null); } catch (e) {}
     });
     f.append(row);
     card.append(left, f); list.append(card);
-    draw(cv, a.frames[0]);
-    players.push({ canvas: cv, frames: a.frames, ms: a.ms, t: 0, i: 0 });
+    const frames = a.frames.map(hexToCols);
+    draw(cv, frames[0]);
+    players.push({ canvas: cv, frames, ms: a.ms, t: 0, i: 0 });
   });
+  ed.syncButtons();
 }
 
 async function refresh(statusOnly) {
   try {
     const d = await api('GET', '/api/playlist');
-    if (statusOnly && playlist && d.version === playlist.version && d.pristine === playlist.pristine) setStatus(d);
-    else apply(d);
+    const same = playlist && d.version === playlist.version && d.pristine === playlist.pristine
+              && d.solo === playlist.solo && d.brightness === playlist.brightness;
+    if (statusOnly && same) setStatus(d); else if (!statusOnly || !document.activeElement.closest('#list')) apply(d);
   } catch (e) {}
 }
 
-// ---------- dodawanie ----------
-let convTimer = null;
-function scheduleConvert() { clearTimeout(convTimer); convTimer = setTimeout(convert, 200); }
+// ---------- edytor ----------
+const ed = {
+  frames: [new Uint8Array(W)], cur: 0, id: null, playing: false, t: 0, dirty: false,
+  ms() { return Math.max(20, Number($('ms').value) || 150); },
 
+  paint(light) {
+    const prev = !this.playing && $('onion').checked && this.cur > 0 ? this.frames[this.cur - 1] : null;
+    draw($('editor'), this.frames[this.cur], prev);
+    $('frameInfo').textContent = 'Klatka ' + (this.cur + 1) + ' z ' + this.frames.length;
+    const thumbs = $('strip').children;
+    if (light && thumbs.length === this.frames.length) {
+      for (let i = 0; i < thumbs.length; i++) thumbs[i].classList.toggle('sel', i === this.cur);
+      draw(thumbs[this.cur].firstChild, this.frames[this.cur]);
+      return;
+    }
+    $('strip').textContent = '';
+    this.frames.forEach((fr, i) => {
+      const t = document.createElement('div'); t.className = 'thumb' + (i === this.cur ? ' sel' : '');
+      const cv = document.createElement('canvas'); cv.width = 192; cv.height = 64;
+      const n = document.createElement('span'); n.textContent = i + 1;
+      t.append(cv, n); t.onclick = () => { this.stop(); this.cur = i; this.paint(true); };
+      $('strip').append(t); draw(cv, fr);
+    });
+    const sel = $('strip').children[this.cur]; if (sel && sel.scrollIntoView) sel.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    this.syncButtons();
+  },
+
+  syncButtons() {
+    const max = playlist ? playlist.limits.frames : 200;
+    $('fNew').disabled = $('fDup').disabled = this.frames.length >= max;
+    $('fDel').disabled = this.frames.length <= 1;
+    $('fLeft').disabled = this.cur === 0; $('fRight').disabled = this.cur === this.frames.length - 1;
+    const target = this.id && playlist && playlist.animations.find(a => a.id === this.id);
+    if (this.id && playlist && !target) this.id = null;
+    $('saveBtn').hidden = !this.id;
+    $('saveBtn').textContent = target ? 'Zapisz zmiany w „' + target.name + '”' : 'Zapisz zmiany';
+    $('addBtn').textContent = this.id ? 'Dodaj jako nową' : 'Dodaj do playlisty';
+    $('addBtn').className = this.id ? '' : 'primary';
+    $('edState').textContent = this.dirty ? 'Niezapisane zmiany' : '';
+  },
+
+  touch() { this.dirty = true; this.saveDraft(); this.syncButtons(); },
+  setId(id) { this.id = id; this.syncButtons(); },
+  stop() { this.playing = false; $('playBtn').textContent = '▶ Odtwórz'; },
+
+  saveDraft() {
+    store('kotki_draft', JSON.stringify({ id: this.id, name: $('name').value, ms: $('ms').value, rep: $('rep').value,
+                                          frames: this.frames.map(colsToHex) }));
+  },
+
+  set(frames, meta) {
+    this.stop();
+    this.frames = frames.map(f => typeof f === 'string' ? hexToCols(f) : f);
+    if (!this.frames.length) this.frames = [new Uint8Array(W)];
+    this.cur = 0;
+    if (meta) { $('name').value = meta.name; $('ms').value = meta.ms; $('rep').value = meta.rep; this.id = meta.id || null; }
+    this.paint();
+  },
+
+  load(a) {
+    if (this.dirty && !confirm('W edytorze są niezapisane zmiany. Zastąpić je animacją „' + a.name + '”?')) return;
+    this.set(a.frames, { name: a.name, ms: a.ms, rep: a.repeat, id: a.id });
+    this.dirty = false; this.saveDraft(); this.syncButtons();
+    $('edTitle').scrollIntoView({ behavior: 'smooth' });
+  },
+
+  payload() { return { name: $('name').value, ms: Number($('ms').value), repeat: Number($('rep').value), frames: this.frames.map(colsToHex) }; },
+};
+
+// rysowanie myszą / palcem: pierwszy piksel decyduje, czy zapalamy, czy gasimy
+(() => {
+  const cv = $('editor'); let mode = null;
+  const cell = e => {
+    const r = cv.getBoundingClientRect();
+    const x = Math.floor((e.clientX - r.left) / r.width * W), y = Math.floor((e.clientY - r.top) / r.height * H);
+    return (x < 0 || x >= W || y < 0 || y >= H) ? null : [x, y];
+  };
+  const put = p => {
+    if (!p) return;
+    const fr = ed.frames[ed.cur], bit = 1 << p[1], was = fr[p[0]] & bit ? 1 : 0;
+    if (mode === null) mode = was ? 0 : 1;
+    if (was === mode) return;
+    if (mode) fr[p[0]] |= bit; else fr[p[0]] &= ~bit;
+    ed.paint(true); ed.dirty = true;
+  };
+  cv.addEventListener('pointerdown', e => { e.preventDefault(); ed.stop(); cv.setPointerCapture(e.pointerId); mode = null; put(cell(e)); });
+  cv.addEventListener('pointermove', e => { if (mode !== null) put(cell(e)); });
+  const end = () => { if (mode !== null) { mode = null; ed.touch(); } };
+  cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end);
+})();
+
+$('playBtn').addEventListener('click', () => {
+  if (ed.playing) { ed.stop(); ed.paint(true); }
+  else { ed.playing = true; ed.t = 0; $('playBtn').textContent = '■ Stop'; }
+});
+$('onion').addEventListener('change', () => ed.paint(true));
+
+document.querySelectorAll('[data-shift]').forEach(b => b.addEventListener('click', () => {
+  const [dx, dy] = b.dataset.shift.split(',').map(Number), src = ed.frames[ed.cur], out = new Uint8Array(W);
+  for (let x = 0; x < W; x++) {
+    let v = src[(x - dx + W) % W];
+    if (dy > 0) v = ((v << 1) | (v >> 7)) & 255; else if (dy < 0) v = ((v >> 1) | (v << 7)) & 255;
+    out[x] = v;
+  }
+  ed.frames[ed.cur] = out; ed.paint(true); ed.touch();
+}));
+$('clearBtn').addEventListener('click', () => { ed.frames[ed.cur] = new Uint8Array(W); ed.paint(true); ed.touch(); });
+$('invertBtn').addEventListener('click', () => { ed.frames[ed.cur] = ed.frames[ed.cur].map(v => ~v & 255); ed.paint(true); ed.touch(); });
+
+const insert = fr => { ed.stop(); ed.frames.splice(ed.cur + 1, 0, fr); ed.cur++; ed.paint(); ed.touch(); };
+$('fNew').addEventListener('click', () => insert(new Uint8Array(W)));
+$('fDup').addEventListener('click', () => insert(ed.frames[ed.cur].slice()));
+$('fDel').addEventListener('click', () => {
+  if (ed.frames.length <= 1) return;
+  ed.stop(); ed.frames.splice(ed.cur, 1); ed.cur = Math.min(ed.cur, ed.frames.length - 1); ed.paint(); ed.touch();
+});
+const swap = d => () => {
+  const j = ed.cur + d; if (j < 0 || j >= ed.frames.length) return;
+  ed.stop(); [ed.frames[ed.cur], ed.frames[j]] = [ed.frames[j], ed.frames[ed.cur]]; ed.cur = j; ed.paint(); ed.touch();
+};
+$('fLeft').addEventListener('click', swap(-1)); $('fRight').addEventListener('click', swap(1));
+['name', 'ms', 'rep'].forEach(id => $(id).addEventListener('input', () => ed.touch()));
+
+$('resetBtn').addEventListener('click', () => {
+  if (ed.dirty && !confirm('Wyrzucić niezapisane zmiany i zacząć od pustej animacji?')) return;
+  ed.set([new Uint8Array(W)], { name: 'Nowa animacja', ms: 150, rep: 1, id: null });
+  ed.dirty = false; ed.saveDraft(); ed.syncButtons();
+});
+
+$('addBtn').addEventListener('click', async () => {
+  try {
+    const d = await api('POST', '/api/animations', ed.payload());
+    ed.id = d.animations[d.animations.length - 1].id; ed.dirty = false; ed.saveDraft();
+    apply(d); toast('Dodano do playlisty.');
+  } catch (e) {}
+});
+$('saveBtn').addEventListener('click', async () => {
+  if (!ed.id) return;
+  try { const d = await api('PATCH', '/api/animations/' + ed.id, ed.payload()); ed.dirty = false; ed.saveDraft(); apply(d); toast('Zapisano zmiany.'); }
+  catch (e) {}
+});
+
+// import z pliku
+let convTimer = null, importedFile = null;
 async function convert() {
   const file = $('file').files[0];
   if (!file) return;
+  if (file !== importedFile && ed.dirty && !confirm('Zastąpić klatki w edytorze zawartością pliku?')) { $('file').value = ''; return; }
   const fd = new FormData();
   fd.append('file', file); fd.append('threshold', $('thr').value);
   fd.append('invert', $('inv').checked ? '1' : '0'); fd.append('fit', $('fit').value);
   try {
     const d = await api('POST', '/api/convert', fd);
-    const firstTime = !pending || pending.file !== file;
-    pending = { file, frames: d.frames };
-    if (firstTime) { $('ms').value = d.ms; $('name').value = file.name.replace(/\.[^.]+$/, '').slice(0, 40); }
-    previewPlayer.frames = d.frames; previewPlayer.i = 0; previewPlayer.ms = Number($('ms').value) || 150;
-    draw($('preview'), d.frames[0]);
-    $('previewMeta').textContent = d.frames.length + (d.frames.length === 1 ? ' klatka' : ' klatek');
-    $('addBtn').disabled = false;
-  } catch (e) { $('addBtn').disabled = true; }
+    const first = file !== importedFile; importedFile = file;
+    ed.set(d.frames, first ? { name: file.name.replace(/\.[^.]+$/, '').slice(0, 40), ms: d.ms, rep: $('rep').value, id: null } : null);
+    ed.touch();
+  } catch (e) {}
 }
-
 $('file').addEventListener('change', convert);
-$('thr').addEventListener('input', () => { $('thrVal').textContent = $('thr').value; scheduleConvert(); });
+$('thr').addEventListener('input', () => { $('thrVal').textContent = $('thr').value; clearTimeout(convTimer); convTimer = setTimeout(convert, 200); });
 $('inv').addEventListener('change', convert);
 $('fit').addEventListener('change', convert);
-$('ms').addEventListener('input', () => { previewPlayer.ms = Number($('ms').value) || 150; });
 
-$('addBtn').addEventListener('click', async () => {
-  if (!pending) return;
-  try {
-    apply(await api('POST', '/api/animations', {
-      name: $('name').value, ms: Number($('ms').value), repeat: Number($('rep').value), frames: pending.frames }));
-    toast('Dodano. ESP pobierze zmianę w ciągu minuty.');
-    pending = null; $('file').value = ''; $('addBtn').disabled = true;
-    previewPlayer.frames = []; draw($('preview'), null); $('previewMeta').textContent = 'Wybierz kolejny plik.';
-  } catch (e) {}
-});
-
-// ---------- kopie ----------
+// ---------- kopie playlisty ----------
 async function replaceAll(anims, msg) {
   try { apply(await api('PUT', '/api/playlist', { animations: anims })); toast(msg); } catch (e) {}
 }
@@ -290,8 +504,16 @@ $('importFile').addEventListener('change', async () => {
   $('importFile').value = '';
 });
 
+// ---------- start ----------
 $('pw').value = store('kotki_pw') || '';
 $('pw').addEventListener('change', () => store('kotki_pw', $('pw').value));
+
+try {   // szkic z poprzedniej wizyty
+  const dr = JSON.parse(store('kotki_draft'));
+  if (dr && Array.isArray(dr.frames) && dr.frames.length) {
+    ed.set(dr.frames, { name: dr.name || 'Nowa animacja', ms: dr.ms || 150, rep: dr.rep || 1, id: dr.id || null });
+  } else ed.paint();
+} catch (e) { ed.paint(); }
 
 refresh();
 setInterval(() => refresh(true), 10000);

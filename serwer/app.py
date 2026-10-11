@@ -30,7 +30,13 @@ app = Flask(__name__, static_folder=os.path.join(BASE, "static"), static_url_pat
 app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD
 
 lock = threading.Lock()
-state = {"animations": [], "pristine": True, "esp_seen": 0.0}
+state = {
+    "animations": [],
+    "pristine": True,      # True = playlista to nadal domyslne kotki
+    "esp_seen": 0.0,
+    # ustawienia wyswietlacza; "set" = ktos je zmienil od startu serwera
+    "settings": {"brightness": 2, "solo": None, "set": False},
+}
 
 
 # ---------- przechowywanie ----------
@@ -38,20 +44,30 @@ def load():
     try:
         with open(DATA_FILE) as f:
             saved = json.load(f)
-        state["animations"] = saved["animations"]
-        state["pristine"] = False
-    except (OSError, ValueError, KeyError):
+        state["pristine"] = bool(saved.get("pristine", False))
+        if not state["pristine"]:
+            state["animations"] = saved["animations"]
+        st = saved.get("settings") or {}
+        state["settings"] = {
+            "brightness": max(0, min(15, int(st.get("brightness", 2)))),
+            "solo": st.get("solo"),
+            "set": bool(st.get("set", False)),
+        }
+    except (OSError, ValueError, KeyError, TypeError):
+        state["pristine"] = True
+    if state["pristine"]:
         with open(os.path.join(BASE, "seed.json")) as f:
             state["animations"] = json.load(f)
-        state["pristine"] = True
 
 
-def save():
-    state["pristine"] = False
+def save(playlist_changed=True):
+    if playlist_changed:
+        state["pristine"] = False
     os.makedirs(os.path.dirname(DATA_FILE), exist_ok=True)
     tmp = DATA_FILE + ".tmp"
     with open(tmp, "w") as f:
-        json.dump({"animations": state["animations"]}, f)
+        json.dump({"animations": state["animations"], "pristine": state["pristine"],
+                   "settings": state["settings"]}, f)
     os.replace(tmp, DATA_FILE)
 
 
@@ -74,6 +90,24 @@ def version():
     if state["pristine"]:
         return "seed"
     return hashlib.sha1(build_bin()).hexdigest()[:12]
+
+
+def solo_index():
+    sid = state["settings"]["solo"]
+    for i, a in enumerate(state["animations"]):
+        if a["id"] == sid:
+            return i
+    return -1
+
+
+def esp_state():
+    """Jedna linia dla ESP: "<wersja playlisty> <jasnosc> <solo>".
+    Jasnosc 0-15, solo = numer animacji granej w petli albo -1 (cala playlista).
+    "- -" = nikt nie ruszal ustawien od restartu serwera, ESP zostaje przy swoich."""
+    st = state["settings"]
+    if not st["set"]:
+        return f"{version()} - -"
+    return f"{version()} {st['brightness']} {solo_index()}"
 
 
 # ---------- walidacja ----------
@@ -127,12 +161,14 @@ def clean_frames(frames):
     return out
 
 
-def clean_anim(d):
+def clean_anim(d, keep_id=False):
     if not isinstance(d, dict):
         raise Bad("Zły format animacji.")
     name = str(d.get("name") or "Animacja").strip()[:40] or "Animacja"
+    old_id = d.get("id")
+    keep = keep_id and isinstance(old_id, str) and 1 <= len(old_id) <= 16 and old_id.isalnum()
     return {
-        "id": uuid.uuid4().hex[:8],
+        "id": old_id if keep else uuid.uuid4().hex[:8],
         "name": name,
         "ms": clean_int(d.get("ms", 150), 20, 5000, "Czas klatki"),
         "repeat": clean_int(d.get("repeat", 1), 1, 50, "Powtórzenia"),
@@ -217,6 +253,14 @@ def api_version():
         return Response(version(), mimetype="text/plain")
 
 
+@app.get("/api/state")
+def api_state():
+    with lock:
+        if request.args.get("d") == "esp":
+            state["esp_seen"] = time.time()
+        return Response(esp_state(), mimetype="text/plain")
+
+
 @app.get("/api/playlist.bin")
 def api_bin():
     with lock:
@@ -232,6 +276,8 @@ def playlist_json():
         password_required=bool(PASSWORD),
         esp_seconds_ago=(round(time.time() - seen) if seen else None),
         limits={"anims": MAX_ANIMS, "frames": MAX_FRAMES, "total": MAX_TOTAL_FRAMES},
+        brightness=state["settings"]["brightness"],
+        solo=(state["settings"]["solo"] if solo_index() >= 0 else None),
         animations=state["animations"],
     )
 
@@ -286,7 +332,9 @@ def api_replace():
     items = data.get("animations")
     if not isinstance(items, list):
         raise Bad("Zły format playlisty.")
-    anims = [clean_anim(a) for a in items]
+    anims = [clean_anim(a, keep_id=True) for a in items]
+    if len({a["id"] for a in anims}) != len(anims):
+        raise Bad("Zły format playlisty (powtórzone id).")
     check_limits(anims)
     with lock:
         state["animations"] = anims
@@ -309,6 +357,14 @@ def api_edit(aid):
                     a["ms"] = clean_int(data["ms"], 20, 5000, "Czas klatki")
                 if "repeat" in data:
                     a["repeat"] = clean_int(data["repeat"], 1, 50, "Powtórzenia")
+                if "frames" in data:
+                    old = a["frames"]
+                    a["frames"] = clean_frames(data["frames"])
+                    try:
+                        check_limits(state["animations"])
+                    except Bad:
+                        a["frames"] = old
+                        raise
                 save()
                 return playlist_json()
     return jsonify(error="Nie ma takiej animacji."), 404
@@ -322,6 +378,26 @@ def api_delete(aid):
     with lock:
         state["animations"] = [a for a in state["animations"] if a["id"] != aid]
         save()
+        return playlist_json()
+
+
+@app.put("/api/settings")
+def api_settings():
+    denied = need_auth()
+    if denied:
+        return denied
+    data = request.get_json(silent=True) or {}
+    with lock:
+        st = state["settings"]
+        if "brightness" in data:
+            st["brightness"] = clean_int(data["brightness"], 0, 15, "Jasność")
+        if "solo" in data:
+            sid = data["solo"]
+            if sid is not None and sid not in [a["id"] for a in state["animations"]]:
+                raise Bad("Nie ma takiej animacji.")
+            st["solo"] = sid
+        st["set"] = True
+        save(playlist_changed=False)
         return playlist_json()
 
 
